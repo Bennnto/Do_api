@@ -1,10 +1,17 @@
 from typing import Annotated
 from datetime import datetime
+import os
 
 from fastapi import Body, FastAPI, Path, Query
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 app = FastAPI()
+
+# Serve static files
+if os.path.exists("public"):
+    app.mount("/static", StaticFiles(directory="public"), name="static")
+
 task_db = {}
 
 class Task(BaseModel):
