@@ -1,7 +1,10 @@
 from typing import Annotated
 from datetime import datetime
+from sqlalchemy import create_engine, Column,  Integer, String, Boolean, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
 
-from fastapi import Body, FastAPI, Path, Query
+from fastapi import Body, FastAPI, Path, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -15,41 +18,74 @@ app.add_middleware(
     allow_methods=["*"],  # Allow all HTTP methods
     allow_headers=["*"],  # Allow all headers
 )
+#Data Base Setup
+DATABASE_URL = "sqlite:///./tasks.db"
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
-task_db = {}
+class TaskDB(Base):
+    __tablename__ = "tasks"
+    
+    task_id = Column(Integer, primary_key=True, index=True)
+    task = Column(String) 
+    description = Column(String, nullable=True)
+    updated = Column(DateTime, default=datetime.now)
+    completed = Column(Boolean, default=False)
+Base.metadata.create_all(bind=engine)
 
 class Task(BaseModel):
-    task : str
+    task: str
     description: str | None = None
-    updated: str  = Field(default_factory=lambda:datetime.now().isoformat())
     completed: bool = Field(default=False)
+
+class TaskResponse(Task):
+    task_id: int
+    updated: str
+
+def get_db():
+    db = SessionLocal()
+    try: 
+        yield db
+    finally :
+        db.close()    
     
 @app.post("/Task/")
-async def createtask(task: Task):
-    task_id = len(task_db) + 1
-    task_db[task_id] = {"task_id": task_id, **task.dict()}
-    return task_db[task_id]
+async def createtask(task: Task, db: Session = Depends(get_db)):
+    db_task = TaskDB(**task.dict())
+    db.add(db_task)
+    db.commit()
+    db.refresh(db_task)
+    return db_task
 
 @app.get("/Task/")
-async def get_task():
-    return list(task_db.values())
-
-@app.get("/Task/{task_id}")
-async def list_task_id(task_id: int):
-    if task_id in task_db:
-        return task_db.get(task_id, {"message":"Task Not Found"})
+async def get_task(db: Session = Depends(get_db)):
+    return db.query(TaskDB).all()
+    
+@app.get("/Task/{task_id}", response_model=TaskResponse)
+async def list_task_id(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(TaskDB).filter(TaskDB.task_id == task_id).first()
+    if task:
+        return task
     return {"message": "Task Not Found"}
-
-@app.put("/Task/{task_id}")
-async def update_todo(task_id: int, task: Task):
-    if task_id in task_db:
-        task_db[task_id] = {"task_id": task_id, **task.dict()}
-        return task_db[task_id]
+    
+@app.put("/Task/{task_id}", response_model=TaskResponse)
+async def update_todo(task_id: int, task: Task, db: Session = Depends(get_db)):
+    db_task = db.query(TaskDB).filter(TaskDB.task_id == task_id).first()
+    if db_task:
+        for key, value in task.dict().items():
+            setattr(db_task, key, value)
+        db_task.updated = datetime.now()
+        db.commit()
+        db.refresh(db_task)
+        return db_task
     return {"message": "Task not found"}
 
 @app.delete("/Task/{task_id}")
-async def del_task(task_id: int):
-    if task_id in task_db:
-        del task_db[task_id]
+async def del_task(task_id: int, db: Session = Depends(get_db)):
+    db_task = db.query(TaskDB).filter(TaskDB.task_id == task_id).first()
+    if db_task:
+        db.delete(db_task)
+        db.commit()
         return {"message": "Task deleted"}
     return {"message": "Task not found"}
