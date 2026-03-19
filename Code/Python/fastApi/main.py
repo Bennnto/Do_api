@@ -19,14 +19,14 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 #Data Base Setup
-DATABASE_URL = "sqlite:///./tasks.db"
+DATABASE_URL = "postgresql://do_api_user:dlvIhVsQjW81PS0whqCMIveJIIXipCXg@dpg-d6u2emvdiees73d9ehog-a:5432/do_api"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 class TaskDB(Base):
     __tablename__ = "tasks"
-    
+     
     task_id = Column(Integer, primary_key=True, index=True)
     task = Column(String) 
     description = Column(String, nullable=True)
