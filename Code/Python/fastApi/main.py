@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field
 app = FastAPI()
 
 # Serve static files
-if os.path.exists("public"):
-    app.mount("/static", StaticFiles(directory="public"), name="static")
+if os.path.exists("build"):
+    app.mount("/static", StaticFiles(directory="build"), name="static")
 
 task_db = {}
 
