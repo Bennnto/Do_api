@@ -106,4 +106,76 @@ async def del_task(task_id: int, db: Session = Depends(get_db)):
         db.delete(db_task)
         db.commit()
         return {"message": "Task deleted"}
+    return {"message": "Task not found"}    
+Base.metadata.create_all(bind=engine)
+
+class Task(BaseModel):
+    task: str
+    description: str | None = None
+    completed: bool = Field(default=False)
+    due_date: str | None = None
+    priority: str = Field(default='Medium')
+
+class TaskResponse(Task):
+    task_id: int
+    updated: str
+
+def get_db():
+    db = SessionLocal()
+    try: 
+        yield db
+    finally :
+        db.close()    
+    
+@app.post("/Task/")
+async def createtask(task: Task, db: Session = Depends(get_db)):
+    task_data = task.dict()
+    if task_data.get('due_date'):
+        try:
+            task_data['due_date'] = datetime.fromisoformat(task_data['due_date'])
+        except (ValueError, TypeError):
+            task_data['due_date'] = None
+            
+    db_task = TaskDB(**task_data)
+    db.add(db_task)
+    db.commit()
+    db.refresh(db_task)
+    return db_task
+
+@app.get("/Task/")
+async def get_task(db: Session = Depends(get_db)):
+    return db.query(TaskDB).all()
+    
+@app.get("/Task/{task_id}", response_model=TaskResponse)
+async def list_task_id(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(TaskDB).filter(TaskDB.task_id == task_id).first()
+    if task:
+        return task
+    return {"message": "Task Not Found"}
+    
+@app.put("/Task/{task_id}", response_model=TaskResponse)
+async def update_todo(task_id: int, task: Task, db: Session = Depends(get_db)):
+    db_task = db.query(TaskDB).filter(TaskDB.task_id == task_id).first()
+    if db_task:
+        task_data = task.dict()
+        if task_data.get('due_date'):
+            try:
+                task_data['due_date'] = datetime.fromisoformat(task_data['due_date'])
+            except (ValueError, TypeError):
+                task_data['due_date'] = None
+        for key, value in task_data.items():
+            setattr(db_task, key, value)
+        db_task.updated = datetime.now()
+        db.commit()
+        db.refresh(db_task)
+        return db_task
+    return {"message": "Task not found"}
+
+@app.delete("/Task/{task_id}")
+async def del_task(task_id: int, db: Session = Depends(get_db)):
+    db_task = db.query(TaskDB).filter(TaskDB.task_id == task_id).first()
+    if db_task:
+        db.delete(db_task)
+        db.commit()
+        return {"message": "Task deleted"}
     return {"message": "Task not found"}
