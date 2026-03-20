@@ -37,7 +37,7 @@ class TaskDB(Base):
     completed = Column(Boolean, default=False)
     priority = Column(String, default='Medium')
 
-Base.metadata.drop_all(bind=engine)    
+
 Base.metadata.create_all(bind=engine)
 
 class Task(BaseModel):
