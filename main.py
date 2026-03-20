@@ -31,13 +31,18 @@ class TaskDB(Base):
     task = Column(String) 
     description = Column(String, nullable=True)
     updated = Column(DateTime, default=datetime.now)
+    due_date = Column(DateTime, nullable=True)
     completed = Column(Boolean, default=False)
+    priority = Column(String, default='Medium')
+    
 Base.metadata.create_all(bind=engine)
 
 class Task(BaseModel):
     task: str
     description: str | None = None
     completed: bool = Field(default=False)
+    due_date: str | None = None
+    priority: str = Field(default='Medium')
 
 class TaskResponse(Task):
     task_id: int
@@ -52,7 +57,14 @@ def get_db():
     
 @app.post("/Task/")
 async def createtask(task: Task, db: Session = Depends(get_db)):
-    db_task = TaskDB(**task.dict())
+    task_data = task.dict()
+    if task_data.get('due_date'):
+        try:
+            task_data['due_date'] = datetime.fromisoformat(task_data['due_date'])
+        except (ValueError, TypeError):
+            task_data['due_date'] = None
+            
+    db_task = TaskDB(**task_data)
     db.add(db_task)
     db.commit()
     db.refresh(db_task)
@@ -73,7 +85,13 @@ async def list_task_id(task_id: int, db: Session = Depends(get_db)):
 async def update_todo(task_id: int, task: Task, db: Session = Depends(get_db)):
     db_task = db.query(TaskDB).filter(TaskDB.task_id == task_id).first()
     if db_task:
-        for key, value in task.dict().items():
+        task_data = task.dict()
+        if task_data.get('due_date'):
+            try:
+                task_data['due_date'] = datetime.fromisoformat(task_data['due_date'])
+            except (ValueError, TypeError):
+                task_data['due_date'] = None
+        for key, value in task_data.items():
             setattr(db_task, key, value)
         db_task.updated = datetime.now()
         db.commit()
