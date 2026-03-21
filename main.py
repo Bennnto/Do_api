@@ -5,7 +5,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 
 from fastapi import Body, FastAPI, Path, Query, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from fastapi.security import HTTPBearer
+from starlette.authentication import AuthCredentials, SimpleUser
 from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -124,7 +125,7 @@ def verify_token(token: str) -> int:
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-async def get_current_user(credentials: HTTPAuthCredentials = Depends(security), db: Session = Depends(get_db)):
+async def get_current_user(credentials = Depends(security), db: Session = Depends(get_db)):
     token = credentials.credentials
     user_id = verify_token(token)
     user = db.query(UserDB).filter(UserDB.user_id == user_id).first()
