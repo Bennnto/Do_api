@@ -1,11 +1,12 @@
 from typing import Annotated
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine, Column,  Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column,  Integer, String, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 
 from fastapi import Body, FastAPI, Path, Query, Depends, HTTPException, status
 from fastapi.security import HTTPBearer
+from fastapi.staticfiles import StaticFiles
 from starlette.authentication import AuthCredentials, SimpleUser
 from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
@@ -14,21 +15,22 @@ from pydantic import BaseModel, Field
 import os
 
 app = FastAPI()
+
+# Enable CORS for all origins - MUST be first middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+security = HTTPBearer()
 ALGORITHM = "HS256"
 #ACCESS_TOKEN_EXPIRE_HOURS = 48
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-security = HTTPBearer()
-
-# Enable CORS for all origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
-    allow_credentials=False,
-    allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers
-)
 #Data Base Setup
 # DATABASE_URL = "postgresql://do_api_user:dlvIhVsQjW81PS0whqCMIveJIIXipCXg@dpg-d6u2emvdiees73d9ehog-a:5432/do_api"
 DATABASE_URL = "sqlite:///./test.db"
@@ -44,7 +46,7 @@ class UserDB(Base):
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
     password_hash = Column(String)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     tasks = relationship("TaskDB", back_populates="owner")
 
@@ -54,7 +56,7 @@ class TaskDB(Base):
     task_id = Column(Integer, primary_key=True, index=True)
     task = Column(String) 
     description = Column(String, nullable=True)
-    updated = Column(DateTime, default=datetime.now)
+    updated = Column(DateTime, default=datetime.utcnow)
     due_date = Column(DateTime, nullable=True)
     completed = Column(Boolean, default=False)
     priority = Column(String, default='Medium')
@@ -153,11 +155,12 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
     
+    created_at_str = db_user.created_at.isoformat() if db_user.created_at else datetime.utcnow().isoformat()
     return UserResponse(
         user_id=db_user.user_id,
         username=db_user.username,
         email=db_user.email,
-        created_at=db_user.created_at.isoformat()
+        created_at=created_at_str
     )
 
 @app.post("/users/login", response_model=Token)
@@ -168,12 +171,12 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     
     # Create JWT token
-def get_db():
-    db = SessionLocal()
-    try: 
-        yield db
-    finally :
-        db.close()    
+    access_token = create_access_token(db_user.user_id)
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": db_user.user_id
+    }    
     
 @app.post("/Task/")
 async def createtask(task: Task, current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -216,3 +219,6 @@ async def del_task(task_id: int, current_user: UserDB = Depends(get_current_user
     db_task = db.query(TaskDB).filter(
         (TaskDB.task_id == task_id) & (TaskDB.user_id == current_user.user_id)
     ).first()
+
+# Mount static files (HTML, CSS, JS)
+app.mount("/", StaticFiles(directory=".", html=True), name="static")
