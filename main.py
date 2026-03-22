@@ -1,6 +1,6 @@
 from typing import Annotated
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine, Column,  Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column,  Integer, String, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 
@@ -44,7 +44,7 @@ class UserDB(Base):
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
     password_hash = Column(String)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     tasks = relationship("TaskDB", back_populates="owner")
 
@@ -54,14 +54,16 @@ class TaskDB(Base):
     task_id = Column(Integer, primary_key=True, index=True)
     task = Column(String) 
     description = Column(String, nullable=True)
-    updated = Column(DateTime, default=datetime.now)
+    updated = Column(DateTime, default=datetime.utcnow)
     due_date = Column(DateTime, nullable=True)
     completed = Column(Boolean, default=False)
     priority = Column(String, default='Medium')
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)  # ADD THIS LINE
     
-    owner = relationship("UserDB", back_populates="tasks")  #  
+    owner = relationship("UserDB", back_populates="tasks") 
+Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
+
 
 def get_db():
     db = SessionLocal()
@@ -153,11 +155,12 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
     
+    created_at_str = db_user.created_at.isoformat() if db_user.created_at else datetime.utcnow().isoformat()
     return UserResponse(
         user_id=db_user.user_id,
         username=db_user.username,
         email=db_user.email,
-        created_at=db_user.created_at.isoformat()
+        created_at=created_at_str
     )
 
 @app.post("/users/login", response_model=Token)
