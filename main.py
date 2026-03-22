@@ -14,21 +14,18 @@ from pydantic import BaseModel, Field
 import os
 
 app = FastAPI()
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
-ALGORITHM = "HS256"
-#ACCESS_TOKEN_EXPIRE_HOURS = 48
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-security = HTTPBearer()
-
-# Enable CORS for all origins
+# Enable CORS for all origins - MUST be first middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
-    allow_credentials=False,
-    allow_methods=["*"],  # Allow all HTTP methods
-    allow_headers=["*"],  # Allow all headers
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+ALGORITHM = "HS256"
 #Data Base Setup
 # DATABASE_URL = "postgresql://do_api_user:dlvIhVsQjW81PS0whqCMIveJIIXipCXg@dpg-d6u2emvdiees73d9ehog-a:5432/do_api"
 DATABASE_URL = "sqlite:///./test.db"
@@ -60,10 +57,8 @@ class TaskDB(Base):
     priority = Column(String, default='Medium')
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)  # ADD THIS LINE
     
-    owner = relationship("UserDB", back_populates="tasks") 
-Base.metadata.drop_all(bind=engine)
+    owner = relationship("UserDB", back_populates="tasks")  #  
 Base.metadata.create_all(bind=engine)
-
 
 def get_db():
     db = SessionLocal()
