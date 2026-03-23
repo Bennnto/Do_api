@@ -1,4 +1,3 @@
-from typing import Annotated
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column,  Integer, String, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.ext.declarative import declarative_base
