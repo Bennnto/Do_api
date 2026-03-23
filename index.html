@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Mgmt api</title>
+    <style>
+        body {
+            font-family: Arial;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin: 5px 5px 5px 0;
+        }
+
+        #result {
+            margin-top: 20px;
+        }
+
+        select {
+            background: white;
+            color: black;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin: 5px 5px 5px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="authStatus" style="background: #4CAF50; color: white; padding: 10px; margin: -20px -20px 20px -20px; display: flex; justify-content: space-between; align-items: center;">
+        <div>✅ Signed in as: <strong id="username">User</strong></div>
+        <button onclick="logout()" style="background: #f44336; padding: 5px 10px;">Logout</button>
+    </div>
+    <h1>Task Manager</h1>
+    <input type="text" id="taskName" placeholder="your task here!">
+    <textarea id="taskDec" placeholder="task description here!"></textarea>
+    <input type="date" id="dueDate" placeholder="Select due date">
+    <label>Priority:</label>
+    <select id="priority">
+        <option value="Low">Low</option>
+        <option value="Medium" selected>Medium</option>
+        <option value="High">High</option>
+    </select>
+    <button onclick="submitTask()">Create Task</button>
+    <select id="filterSelect" onchange="applyFilter(this.value)">
+        <option value="all">All Task</option>
+        <option value="pending">Pending</option>
+        <option value="complete">Completed</option>
+    </select>
+    <button onclick="loadTask()">Show Tasks</button>
+    <input type="number" id="taskId" placeholder="Task ID to delete">
+    <button onclick="deleteTask()">Delete Task</button>
+    <div id="result"></div>
+
+    <script>
+        const API_URL = "https://do-web-api.onrender.com";
+        //const API_URL = "http://localhost:8001";
+        let currentFilter = 'all'
+
+        // Check if user is logged in on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            const token = localStorage.getItem("token");
+            const username = localStorage.getItem("username");
+            
+            if (!token) {
+                // Redirect to login if not authenticated
+                window.location.href = "./login.html";
+                return;
+            }
+            
+            // Display username
+            if (username) {
+                document.getElementById("username").textContent = username;
+            }
+            
+            // Auto-load tasks when page loads
+            loadTask();
+        });
+
+        function logout() {
+            localStorage.removeItem("token");
+            localStorage.removeItem("username");
+            window.location.href = "./login.html";
+        }
+
+        function applyFilter(status) {
+            currentFilter = status;
+            loadTask()
+        }
+
+        function formatDueDate(dueDateString) {
+            if (!dueDateString) return "No Due Date";
+            const dueDate = new Date(dueDateString);
+            const today = new Date()
+            const diff = Math.ceil((dueDate - today)) / (1000 * 60 * 60 * 24)
+            if (diff < 0) return `Overdue by ${Math.abs(diff)} days`
+            if (diff === 0) return `Due Today`
+            if (diff <= 3) return `Due in ${diff}`
+            return dueDate.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+            })
+        }
+
+        async function submitTask() {
+            try {
+                const task = document.getElementById("taskName").value.trim();
+                const description = document.getElementById("taskDec").value.trim();
+                const dueDate = document.getElementById("dueDate").value
+                const priority = document.getElementById("priority").value;
+
+                if (!task) {
+                    document.getElementById('result').innerHTML = `❌ Error: Task name cannot be empty`;
+                    return;
+                }
+                const payload = {
+                    "task": task,
+                    "description": description || null,
+                    "priority": priority,
+                    "due_date": dueDate || null
+                }
+                document.getElementById('result').innerHTML = `⏳ Creating task...`;
+                console.log('Sending request to:', API_URL + '/Task/');
+                console.log('Payload:', payload);
+
+                const token = localStorage.getItem("token");
+                const response = await fetch(API_URL + '/Task/', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                console.log('Response status:', response.status);
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                document.getElementById('result').innerHTML = `✅ Task created: ID ${data.task_id}`;
+
+                // Clear inputs
+                document.getElementById("taskName").value = '';
+                document.getElementById("taskDec").value = '';
+                document.getElementById("dueDate").value = '';
+            } catch (error) {
+                console.error('Full error details:', error);
+                document.getElementById('result').innerHTML = `❌ Error: ${error.message}<br><small>Check console (F12) for details</small>`;
+            }
+        }
+
+        async function loadTask() {
+            try {
+                document.getElementById('result').innerHTML = `⏳ Loading tasks...`;
+
+                const token = localStorage.getItem("token");
+                const response = await fetch(API_URL + '/Task/', {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+
+                const tasks = await response.json();
+
+                if (!Array.isArray(tasks) || tasks.length === 0) {
+                    document.getElementById('result').innerHTML = `📭 No tasks yet`;
+                    return;
+                }
+                // Store tasks globally and in object t
+                window.tasksData = {}
+                tasks.forEach(t => {
+                    window.tasksData[t.task_id] = t;
+                })
+                let filteredTasks = tasks;
+                if (currentFilter === 'complete') {
+                    filteredTasks = tasks.filter(t => t.completed === true);
+                } else if (currentFilter === 'pending') {
+                    filteredTasks = tasks.filter(t => t.completed === false);
+                }
+                document.getElementById('result').innerHTML = filteredTasks.map(t =>
+                    `<p style="display: flex; align-items: center; gap: 5px; padding: 8px; border: 1px solid #ddd; margin: 5px 0; border-radius: 8px;">
+                    <input type="checkbox"
+                    id="task-${t.task_id}"
+                    ${t.completed ? 'checked' : ''}
+                    onchange="updateTaskStatus(${t.task_id})"
+                    style="cursor: pointer; width: 18px; height: 18px;">
+                    <span style="flex: 1;">
+                        <strong>#${t.task_id}</strong> - ${t.task}
+                        <br><small style="color: #666;">${t.description || 'No description'}</small>
+                        <br><small style="color: #999;">${formatDueDate(t.due_date)}</small>
+                    </span>
+                    <span style="color: ${t.completed ? 'green' : 'orange'}; font-weight: bold;">
+                        ${t.completed ? '✓ Done' : '⏳ Pending'}
+                    </span>
+                    <span style="color: ${t.priority === 'Medium' ? 'blue' : t.priority === 'High' ? 'red' : 'green'}; font-weight: bold;">
+                        ${t.priority || 'Medium'}
+                    </span>
+                    <span style ="flex: 1;">
+                        <small>Due Date: ${t.due_date}</small>
+                </p>`
+                ).join('');
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('result').innerHTML = `❌ Error: ${error.message}`;
+            }
+
+        }
+        async function deleteTask() {
+            try {
+                const task_id = document.getElementById('taskId').value.trim()
+                if (!task_id) {
+                    document.getElementById('result').innerHTML = `❌ Not Found Task`
+                    return;
+                }
+                const token = localStorage.getItem("token");
+                const response = await fetch(`${API_URL}/Task/${task_id}`, {
+                    method: 'DELETE',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                })
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+                const data = await response.json()
+                document.getElementById('result').innerHTML = `${data.message}`
+                document.getElementById('taskId').innerHTML = ''
+            } catch (error) {
+                document.getElementById('result').innerHTML = `Task id > ${task_id} Not Found`
+            }
+        }
+        async function updateTaskStatus(taskId) {
+            try {
+                const checkbox = document.getElementById(`task-${taskId}`);
+                const task = window.tasksData[taskId];
+
+                if (!task) {
+                    document.getElementById('result').innerHTML = `❌ Error: Task not found`;
+                    return;
+                }
+
+                document.getElementById('result').innerHTML = `⏳ Updating task...`;
+
+                const token = localStorage.getItem("token");
+                const response = await fetch(`${API_URL}/Task/${taskId}`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        task: task.task,
+                        description: task.description,
+                        completed: checkbox.checked,
+                        priority: task.priority,
+                        due_date: task.due_date
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to update: ${response.status}`);
+                }
+
+                await loadTask();
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('result').innerHTML = `❌ Error: ${error.message}`;
+            }
+        }
+
+    </script>
+
+</body>
+
+</html>
