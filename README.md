@@ -1,5 +1,5 @@
-# Task Api
-Task API is a simple RESTful backend for managing to‑do tasks, built with **FastAPI** and **SQLAlchemy**.  
+# Do Api
+Do API is a Task/To do API that create to be a simple RESTful backend for managing to‑do tasks, built with **FastAPI** and **SQLAlchemy**.  
 Users can register, log in, and then securely create and manage their own tasks via JWT-based authentication.
 
 ## Features
